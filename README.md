@@ -24,11 +24,9 @@ llms.txt             AI-crawler-friendly summary (llms.txt standard)
   engines and AI assistants parse name, title, employer, education, and
   skills as structured data rather than guessing from prose.
 - **Open Graph / Twitter meta tags** — control how the site previews when
-  shared on LinkedIn, Slack, iMessage, etc. There's no dedicated OG image
-  yet (`assets/favicon.svg` isn't a good fit — OG previews need a PNG/JPG,
-  ideally 1200×630). Add one at `assets/og-image.png` and wire it into
-  `og:image` / `twitter:image` in `index.html` if you want a richer preview
-  card.
+  shared on LinkedIn, Slack, iMessage, etc. `assets/og-image.jpg` (1200×630,
+  generated to match the site's dark gradient theme) is wired into
+  `og:image` / `twitter:image` (`twitter:card` is `summary_large_image`).
 
 All three new root files (`robots.txt`, `sitemap.xml`, `llms.txt`) are synced
 by `scripts/deploy.sh` and `scripts/update.sh` alongside `index.html`.
