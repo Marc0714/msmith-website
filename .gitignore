@@ -1,0 +1,17 @@
+# Private — not for the public repo
+Resume/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea/
+.vscode/
+
+# Local Claude Code settings (machine-specific, may reference local paths)
+.claude/settings.local.json
+
+# Env files (in case any get added later)
+.env
+.env.*

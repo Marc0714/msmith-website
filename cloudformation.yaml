@@ -1,0 +1,215 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  S3 + CloudFront hosting for Marc Smith's personal site (static HTML/CSS/JS, no build step).
+  NOTE: Must be deployed to us-east-1 — ACM certificates for CloudFront
+  must exist in us-east-1 regardless of your users' locations.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: 'msmith.org'
+    Description: >
+      Apex domain without www. The certificate will cover both the apex and
+      www, and www will redirect to the apex via a CloudFront Function.
+      Leave blank to use the CloudFront *.cloudfront.net URL only.
+
+Conditions:
+  HasDomain: !Not [!Equals [!Ref DomainName, '']]
+
+Resources:
+
+  # ─── ACM Certificate ──────────────────────────────────────────────────────────
+  # Covers both apex and www. CloudFormation will pause at this resource until
+  # the DNS validation CNAMEs are added to your DNS provider (Cloudflare).
+  # The deploy script surfaces those CNAME records automatically.
+
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: HasDomain
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames:
+        - !Sub "www.${DomainName}"
+      ValidationMethod: DNS
+
+  # ─── CloudFront Function — edge routing ──────────────────────────────────────
+  # Handles two things at the edge (a cache behavior allows only one CloudFront
+  # Function per event type, so both live here):
+  #   1. www → apex redirect (301)
+  #   2. Markdown negotiation — AI agents that send `Accept: text/markdown`
+  #      get llms.txt instead of the HTML homepage. Since this rewrite happens
+  #      before the cache lookup, it's cached under its own key (no Vary needed).
+
+  WWWRedirectFunction:
+    Type: AWS::CloudFront::Function
+    Condition: HasDomain
+    Properties:
+      Name: !Sub "${AWS::StackName}-edge-router"
+      AutoPublish: true
+      FunctionConfig:
+        Comment: !Sub "www redirect + markdown negotiation for ${DomainName}"
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var host = request.headers.host.value;
+
+          if (host.startsWith('www.')) {
+            return {
+              statusCode: 301,
+              statusDescription: 'Moved Permanently',
+              headers: {
+                location: { value: 'https://' + host.slice(4) + request.uri }
+              }
+            };
+          }
+
+          var accept = request.headers.accept ? request.headers.accept.value : '';
+          if ((request.uri === '/' || request.uri === '/index.html') &&
+              accept.indexOf('text/markdown') !== -1) {
+            request.uri = '/llms.txt';
+          }
+
+          return request;
+        }
+
+  # ─── Security Headers Policy ─────────────────────────────────────────────────
+  # Applied to every CloudFront response. Scored A+ on securityheaders.com.
+
+  SecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub "${AWS::StackName}-security-headers"
+        SecurityHeadersConfig:
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 63072000   # 2 years
+            IncludeSubdomains: true
+            Preload: true
+            Override: true
+          ContentTypeOptions:
+            Override: true                     # X-Content-Type-Options: nosniff
+          FrameOptions:
+            FrameOption: DENY                  # X-Frame-Options: DENY
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+        CustomHeadersConfig:
+          Items:
+            - Header: Permissions-Policy
+              Value: "camera=(), microphone=(), geolocation=(), payment=(), interest-cohort=()"
+              Override: true
+
+  # ─── S3 Bucket (private — CloudFront OAC handles all access) ─────────────────
+
+  WebsiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # ─── CloudFront Origin Access Control ────────────────────────────────────────
+
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # ─── CloudFront Distribution ──────────────────────────────────────────────────
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Comment: !Sub "Marc Smith personal site — ${AWS::StackName}"
+        # Both apex and www are aliases so CloudFront accepts traffic for both.
+        # The www → apex redirect is handled by WWWRedirectFunction below.
+        Aliases: !If
+          - HasDomain
+          - - !Ref DomainName
+            - !Sub "www.${DomainName}"
+          - !Ref AWS::NoValue
+        ViewerCertificate: !If
+          - HasDomain
+          - AcmCertificateArn: !Ref Certificate
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt WebsiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig: {}
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          # AWS managed CachingOptimized policy
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+          FunctionAssociations: !If
+            - HasDomain
+            - - EventType: viewer-request
+                FunctionARN: !GetAtt WWWRedirectFunction.FunctionARN
+            - !Ref AWS::NoValue
+        # Single-page site — no dedicated 404 page, so fall back to index.html.
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+  # ─── Bucket Policy ────────────────────────────────────────────────────────────
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${WebsiteBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+# ─── Outputs ───────────────────────────────────────────────────────────────────
+
+Outputs:
+  BucketName:
+    Description: S3 bucket — sync the site's static files here
+    Value: !Ref WebsiteBucket
+
+  DistributionId:
+    Description: CloudFront distribution ID (used for cache invalidation on deploy)
+    Value: !Ref Distribution
+
+  DistributionDomain:
+    Description: CloudFront domain — point both your apex CNAME and www CNAME here
+    Value: !GetAtt Distribution.DomainName
+
+  WebsiteURL:
+    Description: Live website URL
+    Value: !If
+      - HasDomain
+      - !Sub "https://${DomainName}"
+      - !Sub "https://${Distribution.DomainName}"

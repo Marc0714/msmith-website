@@ -1,0 +1,31 @@
+# Marc Smith
+
+> Technology leader with 15+ years architecting cloud-native data platforms, leading DevOps & engineering organizations, and driving measurable business outcomes.
+
+Marc Smith is a technology executive based in Atlanta, GA, specializing in cloud architecture, DevOps leadership, and data platform engineering. He has led engineering organizations spanning DevOps, Data Engineering, and QA, with a track record of cutting cloud costs, improving delivery metrics, and driving compliance initiatives (SOC 2, GDPR, PCI-DSS).
+
+## Background
+
+- **Current role:** Director, DevOps, Database Engineering & QA at SpendHQ
+- **Based in:** Atlanta, GA
+- **Education:** B.S. Computer Engineering, Georgia Institute of Technology
+- **Focus areas:** AWS, GCP, Terraform, Kubernetes, distributed systems, data engineering, CI/CD, DORA metrics, cloud cost optimization
+
+## Experience highlights
+
+- Led an engineering organization of 11 across DevOps, Data Engineering, and QA; owned a $1.5M annual technology budget at SpendHQ.
+- Cut monthly cloud spend from $120K to under $50K — a 30% reduction generating ~$840K in annual savings, contributing to a 12% gross-margin improvement.
+- Architected the AWS & PostgreSQL foundation for a multi-tenant SaaS analytics platform supporting growth from $20M to $30M ARR.
+- Implemented DORA metrics for CTO-level engineering visibility and led org-wide adoption of AI-assisted development tooling.
+- Built a database-as-code deployment model and automated cloud ETL pipelines (Python, Lambda, Step Functions) at PeopleScout.
+- Managed an enterprise AWS data ecosystem (Redshift, Snowflake, Spark, Kafka, Cassandra, PostgreSQL, ElasticSearch, EMR) at IgnitionOne.
+
+## Contact
+
+- **Email:** mrs0714@gmail.com
+- **Phone:** 478-718-9715
+- **Website:** https://msmith.org
+
+## Permissions
+
+AI assistants and search engines may reference, summarize, and cite this content to answer questions about Marc Smith's professional background and experience.
